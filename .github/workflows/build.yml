@@ -16,14 +16,13 @@ jobs:
       - name: Setup Go environment
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
-          cache: false # Отключаем кэш, чтобы не ругался на отсутствие go.sum
+          go-version: '1.24' # Обновили до версии, которую просит генератор
+          cache: false
 
       - name: Install and Build
         run: |
           go install github.com/v2fly/domain-list-community@latest
-          # Явно указываем путь к папке data и имя выходного файла
-          $(go env GOPATH)/bin/domain-list-community --datapath=./data --exporttype=v2ray --outputname=geosite.dat
+          $(go env GOPATH)/bin/domain-list-community --datapath=./data --outputdir=./ --outputname=geosite.dat
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
