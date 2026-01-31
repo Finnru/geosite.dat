@@ -1,15 +1,17 @@
 name: Build Geosite
 on:
-  workflow_dispatch: # Кнопка для ручного запуска
+  workflow_dispatch: # Позволяет запускать вручную кнопкой
   push:
-    branches: [ main ] # Запуск при каждом сохранении
-    paths: [ 'data/**' ]
+    branches:
+      - main
+    paths:
+      - 'data/**'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Go
@@ -17,12 +19,12 @@ jobs:
         with:
           go-version: '>=1.21'
 
-      - name: Build
+      - name: Install generator and build
         run: |
           go install github.com/v2fly/domain-list-community@latest
           export PATH=$PATH:$(go env GOPATH)/bin
           domain-list-community --datapath=./data --exporttype=v2ray
-          # Файл на выходе будет называться geosite.dat
+          # Файл будет создан в корне под именем geosite.dat
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
