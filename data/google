@@ -19,49 +19,34 @@ include:opensourceinsights
 include:polymer
 include:v8
 include:youtube
-
 # All .and domains
 # and (TLD application withdrawn by Google)
-
 # All .chrome domains
 chrome
-
 # All .dclk domains
 dclk
-
 # All .gbiz domains
 gbiz
-
 # All .gle domains
 gle
-
 # All .gmail domains
 gmail
-
 # All .goo domains
 goo
-
 # All .goog domains
 goog
-
 # All .google domains
 google
-
 # All .guge domains
 guge
-
 # All .hangout domains
 hangout
-
 # All .nexus domains
 nexus
-
 # All .谷歌 domains
 xn--flw351e
-
 # All .グーグル domains
 xn--qcka1pmc
-
 # Source: https://www.google.com/supported_domains
 google.ad
 google.ae
@@ -254,7 +239,6 @@ google.tt
 google.vg
 google.vu
 google.ws
-
 # Others
 0emm.com
 1e100.net
@@ -537,17 +521,14 @@ xn--gogl-0nd52e.com # gοoglе.com
 xn--gogl-1nd42e.com # goοglе.com
 xplr.co
 zukunftswerkstatt.de
-
 # Google safe browsing relay
 # https://www.fastly.com/press/press-releases/google-selects-Fastly-Oblivious-HTTP-Relay-for-Privacy-Sandbox/
 full:google-ohttp-relay-safebrowsing.fastly-edge.com
-
 # Domains and services below are available in China mainland
 # Use in config file like this: "geosite:google@cn"
 gvt1-cn.com @cn
 gvt2-cn.com @cn
 full:www.recaptcha.net @cn
-
 # The rules below are from https://github.com/felixonmars/dnsmasq-china-list/blob/master/google.china.conf
 # Revision: 1c2d107d4e7eaa0b192e08bb0beddde4aab247f6
 # Duplicates removed
