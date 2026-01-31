@@ -25,7 +25,6 @@ spyjinx.com
 twinmotion.com
 unrealengine.com
 unrealtournament.com
-
 egdownload.fastly-edge.com
 regexp:^cdn\d-epicgames-\d+\.file\.myqcloud\.com$ @cn
 regexp:^epicgames-download\d\.akamaized\.net$
