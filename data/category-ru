@@ -1,6 +1,3 @@
-# Russian websites
-
-# Russian TLDs
 domain:moscow
 domain:tatar
 domain:ru
@@ -14,8 +11,6 @@ domain:xn--p1acf
 domain:xn--p1ai
 domain:ru.com
 domain:ru.net
-  
-# Keywords and specific domains
 keyword:yandex
 keyword:kasper
 keyword:habr
@@ -57,8 +52,6 @@ keyword:interkh
 keyword:feonet
 keyword:stream-balancer
 keyword:psk
-
-# Domains
 trbcdn.net
 tbank-online.com
 taxsee.com
