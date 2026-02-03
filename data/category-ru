@@ -7,13 +7,12 @@ domain:xn--c1avg
 domain:xn--d1acj3b
 domain:xn--p1acf
 domain:xn--p1ai
-domain:ru.com
-domain:ru.net
 keyword:yandex
 keyword:kasper
 keyword:habr
 keyword:ozon
 keyword:avito
+include:vk
 1lot.tv
 leonardo.osnova.io
 keyword:rezka
@@ -55,3 +54,5 @@ tbank-online.com
 taxsee.com
 domain:moscow
 domain:tatar
+domain:ru.com
+domain:ru.net
