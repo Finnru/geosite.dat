@@ -1,6 +1,5 @@
 # List of all domains being operated by Google Inc.
 include:android
-include:google-ads
 include:google-play
 include:youtube
 # All .gbiz domains
@@ -91,6 +90,7 @@ fflick.com
 financeleadsonline.com
 fitbit.com
 foofle.com
+keyword:google
 froogle.com
 fuchsia.dev
 g-tun.com
@@ -106,37 +106,6 @@ gipscorp.com
 globaledu.org
 gmodules.com
 gonglchuangl.net
-googleacquisitionmigration.com
-googleapis.cn
-googleapis.com
-googleapps.com
-googlearth.com
-googleblog.com
-googlebot.com
-googlecapital.com
-googlecert.net
-googlecode.com
-googlecommerce.com
-googlecompare.co.uk
-googledanmark.com
-googledomains.com
-googledrive.com
-googlee.com
-googleearth.com
-googlefiber.com
-googlefiber.net
-googlefinland.com
-googlemail.com
-googlemaps.com
-googlepagecreator.com
-googlephotos.com
-googleplus.com
-googlesource.com
-googlestore.com
-googlesverige.com
-googleusercontent.com
-googleventures.com
-googlezip.net
 googlr.com
 gridaware.app
 gsrc.io
