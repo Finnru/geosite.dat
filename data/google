@@ -2,6 +2,7 @@
 include:android
 include:google-play
 include:youtube
+keyword:google
 # All .gbiz domains
 gbiz
 # All .gle domains
@@ -88,7 +89,6 @@ fflick.com
 financeleadsonline.com
 fitbit.com
 foofle.com
-keyword:google
 froogle.com
 fuchsia.dev
 g-tun.com
