@@ -1,11 +1,11 @@
-name: Build Geosite
+name: Build-GeoIP-Raw
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Позволяет запускать вручную
+  schedule:
+    - cron: "0 0 */1 * *" 
   push:
-    branches:
-      - main
-      - master
+    branches: [master, main]
 
 permissions:
   contents: write
@@ -14,40 +14,125 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Go environment
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
-          cache: false
 
-      - name: Install and Build
+      - name: Prepare Data (IP2Location CIDR)
         run: |
-          go install github.com/v2fly/domain-list-community@latest
-          $(go env GOPATH)/bin/domain-list-community --datapath=./data --outputdir=./ --outputname=geosite.dat
+          mkdir -p data
+          # Генерируем дату для использования в GitHub Actions
+          echo "RELEASE_DATE=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
+          
+          TOKEN="${{ secrets.IP2LOCATION_TOKEN }}"
+          
+          echo "Downloading IP2Location DB11LITECIDR..."
+          curl -L -A "Mozilla/5.0" "https://www.ip2location.com/download/?token=${TOKEN}&file=DB11LITECIDR" -o db.zip
+
+          unzip -o db.zip
+          CSV_FILE=$(ls *.CSV 2>/dev/null | grep -i "CIDR" | head -n 1)
+          
+          # Парсим RU
+          awk -F',' '$2 ~ /"RU"/ {gsub(/"/, "", $1); print $1}' "$CSV_FILE" > data/ru
+          echo "Found $(wc -l < data/ru) RU ranges."
+
+      - name: Create Generator Script
+        run: |
+          cat <<EOF > builder.go
+          package main
+          import (
+          	"bufio"
+          	"encoding/binary"
+          	"fmt"
+          	"log"
+          	"net"
+          	"os"
+          	"path/filepath"
+          	"strings"
+          )
+          func writeVarint(v uint32) []byte {
+          	var buf [binary.MaxVarintLen32]byte
+          	n := binary.PutUvarint(buf[:], uint64(v))
+          	return buf[:n]
+          }
+          func encodeField(num int, wireType int, data []byte) []byte {
+          	tag := uint32((num << 3) | wireType)
+          	res := writeVarint(tag)
+          	if wireType == 2 {
+          		res = append(res, writeVarint(uint32(len(data)))...)
+          	}
+          	res = append(res, data...)
+          	return res
+          }
+          func main() {
+          	var allEntries []byte
+          	files, err := os.ReadDir("./data")
+          	if err != nil { log.Fatal(err) }
+          	for _, f := range files {
+          		if f.IsDir() { continue }
+          		tag := strings.ToUpper(f.Name())
+          		fmt.Printf("Packing tag: %s\n", tag)
+          		var cidrsData []byte
+          		file, _ := os.Open(filepath.Join("./data", f.Name()))
+          		scanner := bufio.NewScanner(file)
+          		for scanner.Scan() {
+          			line := strings.TrimSpace(scanner.Text())
+          			if line == "" || strings.HasPrefix(line, "#") { continue }
+          			_, ipnet, err := net.ParseCIDR(line)
+          			if err == nil {
+          				ip := ipnet.IP.To4()
+          				if ip == nil { ip = ipnet.IP.To16() }
+          				mask, _ := ipnet.Mask.Size()
+          				c := encodeField(1, 2, ip)
+          				c = append(c, encodeField(2, 0, writeVarint(uint32(mask)))...)
+          				cidrsData = append(cidrsData, encodeField(2, 2, c)...)
+          			}
+          		}
+          		file.Close()
+          		geoIPData := encodeField(1, 2, []byte(tag))
+          		geoIPData = append(geoIPData, cidrsData...)
+          		allEntries = append(allEntries, encodeField(1, 2, geoIPData)...)
+          	}
+          	os.WriteFile("geoip.dat", allEntries, 0644)
+          }
+          EOF
+
+      - name: Run Generator
+        run: go run builder.go
 
       - name: Generate Checksum
-        run: sha256sum geosite.dat > geosite.dat.sha256sum
+        run: sha256sum geoip.dat > geoip.dat.sha256sum
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: geosite-file
-          path: |
-            geosite.dat
-            geosite.dat.sha256sum
+      - name: Commit and Push Data
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add data/ru
+          git commit -m "Update RU IPs [${{ env.RELEASE_DATE }}]" || echo "No changes"
+          git push
+
+      - name: Delete Old Release Tag
+        run: |
+          # Удаляем локальный и удаленный тег, чтобы форсировать обновление даты релиза
+          git tag -d latest || true
+          git push origin :refs/tags/latest || true
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
-        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
         with:
           tag_name: latest
-          name: "Latest Geosite Build"
-          body: "Автоматическая сборка geosite.dat на основе данных из папки data."
+          name: "GeoIP Build: ${{ env.RELEASE_DATE }}"
+          body: "Обновлено автоматически раз в 3 дня. Источник: IP2Location LITE."
+          draft: false
+          prerelease: false
+          make_latest: true
           files: |
-            geosite.dat
-            geosite.dat.sha256sum
+            geoip.dat
+            geoip.dat.sha256sum
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
