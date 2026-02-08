@@ -64,7 +64,7 @@ jobs:
           	for _, f := range files {
           		if f.IsDir() || strings.HasPrefix(f.Name(), ".") { continue }
           		
-          		tagName := strings.ToLower(f.Name())
+          		tagName := strings.ToUpper(f.Name())
           		fmt.Printf("Packing category: %s\n", tagName)
           		
           		var domainsBytes []byte
