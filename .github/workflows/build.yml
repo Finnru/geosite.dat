@@ -14,7 +14,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.ref }}
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -24,30 +23,15 @@ jobs:
       - name: Check for changes in geosite data
         id: check_changes
         run: |
-          echo "Checking for changes in geosite data files..."
-          
-          # Создаем папку если её нет
+          echo "Checking geosite data files..."
           mkdir -p geosite.dat/data
           
-          # Список файлов (без расширения)
-          echo "Files in geosite.dat/data/:"
-          ls -la geosite.dat/data/ 2>/dev/null || echo "No files found"
-          
-          # Проверяем, есть ли изменения в geosite.dat/data
-          # Сравниваем с последним коммитом
-          git fetch origin ${{ github.ref_name }}
-          if git diff --name-only HEAD origin/${{ github.ref_name }} -- geosite.dat/data/ 2>/dev/null | grep -q .; then
-            echo "Changes detected in geosite data files"
+          # Простая проверка - всегда генерируем, если запущено вручную
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "Manual run detected, will generate geosite.dat"
             echo "has_changes=true" >> $GITHUB_OUTPUT
           else
-            # Проверяем, существует ли уже geosite.dat
-            if [ -f "geosite.dat" ]; then
-              echo "No changes in geosite data files, geosite.dat already exists"
-              echo "has_changes=false" >> $GITHUB_OUTPUT
-            else
-              echo "No geosite.dat found, will generate"
-              echo "has_changes=true" >> $GITHUB_OUTPUT
-            fi
+            echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Validate GeoSite Files
@@ -62,7 +46,7 @@ jobs:
           for file in *; do
             if [ -f "$file" ] && [ ! -d "$file" ]; then
               FILE_COUNT=$((FILE_COUNT + 1))
-              echo "Validating $file..."
+              echo "📄 Found: $file"
               
               if [ ! -s "$file" ]; then
                 echo "❌ ERROR: $file is empty"
@@ -72,18 +56,18 @@ jobs:
               
               FIRST_LINE=$(head -1 "$file" | xargs)
               if [[ ! "$FIRST_LINE" =~ ^[a-zA-Z0-9_-]+:$ ]]; then
-                echo "❌ ERROR: First line must be category name ending with ':'"
+                echo "❌ ERROR: First line must be 'category-name:'"
                 echo "  Found: '$FIRST_LINE'"
                 ERROR_COUNT=$((ERROR_COUNT + 1))
+              else
+                echo "  ✅ Category: ${FIRST_LINE%:}"
               fi
-              
-              echo "✅ $file validation completed"
             fi
           done
           
           if [ "$FILE_COUNT" -eq 0 ]; then
             echo "❌ ERROR: No files found in geosite.dat/data/"
-            ERROR_COUNT=$((ERROR_COUNT + 1))
+            exit 1
           fi
           
           if [ $ERROR_COUNT -gt 0 ]; then
@@ -91,7 +75,7 @@ jobs:
             exit 1
           fi
           
-          echo "✅ All $FILE_COUNT geosite files validated successfully"
+          echo "✅ Found $FILE_COUNT valid geosite files"
 
       - name: Create GeoSite Generator Script
         if: steps.check_changes.outputs.has_changes == 'true'
@@ -323,16 +307,12 @@ jobs:
           
           echo "STATS_FILES=${TOTAL_FILES}" >> $GITHUB_ENV
           echo "STATS_LINES=${TOTAL_LINES}" >> $GITHUB_ENV
-
-      - name: Skip Generation (No Changes)
-        if: steps.check_changes.outputs.has_changes == 'false'
-        run: |
-          echo "⏭️  No changes detected in geosite data files"
-          echo "Using existing geosite.dat"
+          
+          echo "📊 Found $TOTAL_FILES categories with $TOTAL_LINES total patterns"
 
       - name: Delete Old Release Tag
         run: |
-          git fetch --tags
+          git fetch --tags 2>/dev/null || true
           git tag -d latest 2>/dev/null || true
           git push origin :refs/tags/latest 2>/dev/null || true
 
@@ -351,6 +331,15 @@ jobs:
             ### 🔒 Проверка целостности:
             ```
             sha256sum: $(cat geosite.dat.sha256sum 2>/dev/null | cut -d' ' -f1 || echo 'N/A')
+            ```
+            
+            ### 📁 Структура:
+            Файлы без расширения в `geosite.dat/data/`:
+            ```
+            geosite.dat/data/
+            ├── google      # Категория "google"
+            ├── category-ru # Категория "category-ru"
+            └── telegram    # Категория "telegram"
             ```
           draft: false
           prerelease: false
