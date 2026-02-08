@@ -12,61 +12,65 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
 
-      - name: Check for changes in geosite data
-        id: check_changes
+      - name: Check Data Files
+        id: check_data
         run: |
-          echo "Checking geosite data files..."
-          mkdir -p geosite.dat/data
+          echo "Checking data directory..."
           
-          # Простая проверка - всегда генерируем, если запущено вручную
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "Manual run detected, will generate geosite.dat"
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+          if [ -d "data" ] && [ "$(ls -A data 2>/dev/null)" ]; then
+            echo "✅ Found data directory with files"
+            echo "has_data=true" >> $GITHUB_OUTPUT
+            echo "data_dir=data" >> $GITHUB_OUTPUT
+            
+            echo "Files in data/:"
+            ls -la data/
           else
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "❌ ERROR: No data directory or empty"
+            echo "has_data=false" >> $GITHUB_OUTPUT
+            exit 1
           fi
 
       - name: Validate GeoSite Files
-        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           echo "Validating geosite data files..."
-          cd geosite.dat/data
+          cd data
           
           ERROR_COUNT=0
           FILE_COUNT=0
           
+          echo "Files found:"
           for file in *; do
             if [ -f "$file" ] && [ ! -d "$file" ]; then
               FILE_COUNT=$((FILE_COUNT + 1))
-              echo "📄 Found: $file"
+              echo "📄 $file"
               
+              # Базовая проверка
               if [ ! -s "$file" ]; then
-                echo "❌ ERROR: $file is empty"
+                echo "  ❌ ERROR: File is empty"
                 ERROR_COUNT=$((ERROR_COUNT + 1))
                 continue
               fi
               
+              # Проверяем первую строку
               FIRST_LINE=$(head -1 "$file" | xargs)
               if [[ ! "$FIRST_LINE" =~ ^[a-zA-Z0-9_-]+:$ ]]; then
-                echo "❌ ERROR: First line must be 'category-name:'"
-                echo "  Found: '$FIRST_LINE'"
-                ERROR_COUNT=$((ERROR_COUNT + 1))
+                echo "  ⚠️  WARNING: First line should be 'category-name:'"
+                echo "    Found: '$FIRST_LINE'"
               else
-                echo "  ✅ Category: ${FIRST_LINE%:}"
+                CATEGORY="${FIRST_LINE%:}"
+                echo "  ✅ Category: $CATEGORY"
               fi
             fi
           done
           
           if [ "$FILE_COUNT" -eq 0 ]; then
-            echo "❌ ERROR: No files found in geosite.dat/data/"
+            echo "❌ ERROR: No files found in data/"
             exit 1
           fi
           
@@ -75,11 +79,13 @@ jobs:
             exit 1
           fi
           
-          echo "✅ Found $FILE_COUNT valid geosite files"
+          echo ""
+          echo "✅ Validation complete: $FILE_COUNT files found"
 
       - name: Create GeoSite Generator Script
-        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
+          echo "Creating geosite generator script for data/ directory..."
+          
           cat << 'EOF' > generate_geosite.go
           package main
           
@@ -122,6 +128,7 @@ jobs:
           		return "", nil
           	}
           	
+          	// Первая строка - название категории
           	if lineNum == 0 && strings.HasSuffix(line, ":") {
           		return line, nil
           	}
@@ -185,7 +192,7 @@ jobs:
           }
           
           func main() {
-          	dataDir := "geosite.dat/data"
+          	dataDir := "data"  // <-- ИЗМЕНЕНО: корневая папка data
           	outputFile := "geosite.dat"
            
           	entries, err := os.ReadDir(dataDir)
@@ -255,7 +262,7 @@ jobs:
           		log.Fatalf("Failed to write output file: %v", err)
           	}
            
-          	fmt.Printf("\n🎉 Generated %s\n", outputFile)
+          	fmt.Printf("\n🎉 Generated %s from %s/\n", outputFile, dataDir)
           	fmt.Printf("📊 Size: %d bytes\n", len(allEntries))
           	fmt.Printf("📈 Statistics:\n")
           	fmt.Printf("  Categories: %d\n", len(entries))
@@ -268,9 +275,8 @@ jobs:
           EOF
 
       - name: Generate GeoSite Binary
-        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
-          echo "Generating geosite.dat binary file..."
+          echo "Generating geosite.dat from data/ directory..."
           go run generate_geosite.go
           
           if [ ! -f "geosite.dat" ] || [ ! -s "geosite.dat" ]; then
@@ -280,21 +286,30 @@ jobs:
           
           echo "✅ geosite.dat generated successfully"
           echo "📏 File size: $(wc -c < geosite.dat) bytes"
+          
+          # Показываем структуру
+          echo ""
+          echo "📁 Input structure:"
+          echo "data/"
+          for file in data/*; do
+            if [ -f "$file" ]; then
+              lines=$(grep -v '^#' "$file" | grep -v '^$' | wc -l)
+              echo "  ├── $(basename "$file") ($((lines-1)) patterns)"
+            fi
+          done
 
       - name: Generate Checksum
-        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           sha256sum geosite.dat > geosite.dat.sha256sum
           echo "SHA256 Checksum:"
           cat geosite.dat.sha256sum
 
       - name: Set Release Date and Stats
-        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           RELEASE_DATE=$(date +'%Y-%m-%d %H:%M')
           echo "RELEASE_DATE=${RELEASE_DATE}" >> $GITHUB_ENV
           
-          cd geosite.dat/data
+          cd data
           TOTAL_FILES=$(find . -maxdepth 1 -type f ! -name ".*" | wc -l)
           TOTAL_LINES=0
           
@@ -308,7 +323,9 @@ jobs:
           echo "STATS_FILES=${TOTAL_FILES}" >> $GITHUB_ENV
           echo "STATS_LINES=${TOTAL_LINES}" >> $GITHUB_ENV
           
-          echo "📊 Found $TOTAL_FILES categories with $TOTAL_LINES total patterns"
+          echo "📊 Statistics:"
+          echo "  Files: $TOTAL_FILES"
+          echo "  Patterns: $TOTAL_LINES"
 
       - name: Delete Old Release Tag
         run: |
@@ -328,18 +345,43 @@ jobs:
             **Категорий:** ${{ env.STATS_FILES || 'N/A' }}
             **Всего паттернов:** ${{ env.STATS_LINES || 'N/A' }}
             
-            ### 🔒 Проверка целостности:
+            ### 📁 Структура исходных данных:
+            Файлы без расширения в `data/`:
             ```
-            sha256sum: $(cat geosite.dat.sha256sum 2>/dev/null | cut -d' ' -f1 || echo 'N/A')
+            data/
+            ├── google      # Категория "google"
+            ├── telegram    # Категория "telegram"
+            └── category-ru # Категория "category-ru"
             ```
             
-            ### 📁 Структура:
-            Файлы без расширения в `geosite.dat/data/`:
+            ### 📝 Формат файлов:
+            ```txt
+            category-name:     # Первая строка
+            domain:example.com
+            full:example.org
+            keyword:tracking
+            *.example.net
+            @other-category
             ```
-            geosite.dat/data/
-            ├── google      # Категория "google"
-            ├── category-ru # Категория "category-ru"
-            └── telegram    # Категория "telegram"
+            
+            ### ⚙️ Использование с Xray:
+            ```json
+            {
+              "routing": {
+                "rules": [
+                  {
+                    "type": "field",
+                    "outboundTag": "proxy",
+                    "domain": ["geosite:google", "geosite:telegram"]
+                  }
+                ]
+              }
+            }
+            ```
+            
+            ### 🔒 Проверка целостности:
+            ```
+            sha256sum: $(cat geosite.dat.sha256sum | cut -d' ' -f1)
             ```
           draft: false
           prerelease: false
