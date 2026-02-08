@@ -42,7 +42,6 @@ jobs:
           	"strings"
           )
 
-          // Вспомогательная функция для Protobuf (Tag + Length + Data)
           func encodeField(num int, wireType int, data []byte) []byte {
           	tag := uint32((num << 3) | wireType)
           	var buf [binary.MaxVarintLen32]byte
@@ -64,6 +63,7 @@ jobs:
           	for _, f := range files {
           		if f.IsDir() || strings.HasPrefix(f.Name(), ".") { continue }
           		
+          		// ЗАМЕНА ТУТ: переводим имя файла в ВЕРХНИЙ регистр
           		tagName := strings.ToUpper(f.Name())
           		fmt.Printf("Packing category: %s\n", tagName)
           		
@@ -74,28 +74,18 @@ jobs:
           		for scanner.Scan() {
           			line := strings.TrimSpace(scanner.Text())
           			if line == "" || strings.HasPrefix(line, "#") { continue }
-          			
-          			// Упаковываем строку как есть (Domain.value)
-          			// В структуре GeoSite Domain: Field 2 - Value (string)
           			domainEntry := encodeField(2, 2, []byte(line))
-          			
-          			// Добавляем Domain в список GeoSite.domain (Field 2)
           			domainsBytes = append(domainsBytes, encodeField(2, 2, domainEntry)...)
           		}
           		file.Close()
 
-          		// Собираем GeoSite: 
-          		// Field 1: country_code (имя категории)
-          		// Field 2: list of domains
           		geoSiteData := encodeField(1, 2, []byte(tagName))
           		geoSiteData = append(geoSiteData, domainsBytes...)
-          		
-          		// Добавляем в общий список GeoSiteList (Field 1)
           		allGeoSites = append(allGeoSites, encodeField(1, 2, geoSiteData)...)
           	}
 
           	os.WriteFile("geosite.dat", allGeoSites, 0644)
-          	fmt.Println("✅ geosite.dat generated successfully.")
+          	fmt.Println("✅ geosite.dat generated successfully with UPPERCASE categories.")
           }
           EOF
 
