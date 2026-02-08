@@ -63,9 +63,11 @@ jobs:
           	for _, f := range files {
           		if f.IsDir() || strings.HasPrefix(f.Name(), ".") { continue }
           		
-          		// ЗАМЕНА ТУТ: переводим имя файла в ВЕРХНИЙ регистр
+          		// ПРИНУДИТЕЛЬНЫЙ ВЕРХНИЙ РЕГИСТР
           		tagName := strings.ToUpper(f.Name())
-          		fmt.Printf("Packing category: %s\n", tagName)
+          		
+          		// Печатаем в лог именно то, что уходит в файл для проверки
+          		fmt.Printf("Writing to DAT category name: [%s]\n", tagName)
           		
           		var domainsBytes []byte
           		file, _ := os.Open(filepath.Join("./data", f.Name()))
@@ -85,7 +87,7 @@ jobs:
           	}
 
           	os.WriteFile("geosite.dat", allGeoSites, 0644)
-          	fmt.Println("✅ geosite.dat generated successfully with UPPERCASE categories.")
+          	fmt.Println("✅ Done. Check the logs above for 'Writing to DAT' names.")
           }
           EOF
 
