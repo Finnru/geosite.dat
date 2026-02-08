@@ -124,6 +124,7 @@ jobs:
           draft: false
           prerelease: false
           make_latest: true
+          # Удаляет старые файлы из релиза перед загрузкой новых
           files: |
             geosite.dat
             geosite.dat.sha256sum
