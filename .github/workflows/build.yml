@@ -13,17 +13,17 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Важно для корректной работы с тегами
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
+          cache: false
 
       - name: Prepare Environment
         run: |
           mkdir -p data
-          # Устанавливаем московское время для переменной RELEASE_DATE
           echo "RELEASE_DATE=$(TZ='Europe/Moscow' date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
           echo "📊 Files to pack:"
           ls data/
@@ -41,54 +41,61 @@ jobs:
           	"path/filepath"
           	"strings"
           )
-          func writeVarint(v uint32) []byte {
-          	var buf [binary.MaxVarintLen32]byte
-          	n := binary.PutUvarint(buf[:], uint64(v))
-          	return buf[:n]
-          }
+
+          // Вспомогательная функция для Protobuf (Tag + Length + Data)
           func encodeField(num int, wireType int, data []byte) []byte {
           	tag := uint32((num << 3) | wireType)
-          	res := writeVarint(tag)
+          	var buf [binary.MaxVarintLen32]byte
+          	n := binary.PutUvarint(buf[:], uint64(tag))
+          	res := buf[:n]
           	if wireType == 2 {
-          		res = append(res, writeVarint(uint32(len(data)))...)
+          		var lBuf [binary.MaxVarintLen32]byte
+          		ln := binary.PutUvarint(lBuf[:], uint64(len(data)))
+          		res = append(res, lBuf[:ln]...)
           	}
-          	res = append(res, data...)
-          	return res
+          	return append(res, data...)
           }
+
           func main() {
-          	var allEntries []byte
+          	var allGeoSites []byte
           	files, err := os.ReadDir("./data")
           	if err != nil { log.Fatal(err) }
+
           	for _, f := range files {
           		if f.IsDir() || strings.HasPrefix(f.Name(), ".") { continue }
+          		
           		tagName := strings.ToLower(f.Name())
           		fmt.Printf("Packing category: %s\n", tagName)
-          		var sitesData []byte
+          		
+          		var domainsBytes []byte
           		file, _ := os.Open(filepath.Join("./data", f.Name()))
           		scanner := bufio.NewScanner(file)
+          		
           		for scanner.Scan() {
           			line := strings.TrimSpace(scanner.Text())
           			if line == "" || strings.HasPrefix(line, "#") { continue }
-          			domainType := "domain"
-          			domainValue := line
-          			if strings.Contains(line, ":") {
-          				parts := strings.SplitN(line, ":", 2)
-          				prefix := parts[0]
-          				if prefix == "domain" || prefix == "full" || prefix == "regexp" || prefix == "keyword" {
-          					domainType = prefix
-          					domainValue = parts[1]
-          				}
-          			}
-          			siteEntry := encodeField(1, 2, []byte(domainType))
-          			siteEntry = append(siteEntry, encodeField(2, 2, []byte(domainValue))...)
-          			sitesData = append(sitesData, encodeField(2, 2, siteEntry)...)
+          			
+          			// Упаковываем строку как есть (Domain.value)
+          			// В структуре GeoSite Domain: Field 2 - Value (string)
+          			domainEntry := encodeField(2, 2, []byte(line))
+          			
+          			// Добавляем Domain в список GeoSite.domain (Field 2)
+          			domainsBytes = append(domainsBytes, encodeField(2, 2, domainEntry)...)
           		}
           		file.Close()
-          		geoSite := encodeField(1, 2, []byte(tagName))
-          		geoSite = append(geoSite, sitesData...)
-          		allEntries = append(allEntries, encodeField(1, 2, geoSite)...)
+
+          		// Собираем GeoSite: 
+          		// Field 1: country_code (имя категории)
+          		// Field 2: list of domains
+          		geoSiteData := encodeField(1, 2, []byte(tagName))
+          		geoSiteData = append(geoSiteData, domainsBytes...)
+          		
+          		// Добавляем в общий список GeoSiteList (Field 1)
+          		allGeoSites = append(allGeoSites, encodeField(1, 2, geoSiteData)...)
           	}
-          	os.WriteFile("geosite.dat", allEntries, 0644)
+
+          	os.WriteFile("geosite.dat", allGeoSites, 0644)
+          	fmt.Println("✅ geosite.dat generated successfully.")
           }
           EOF
 
@@ -100,10 +107,8 @@ jobs:
 
       - name: Cleanup and Update Release
         run: |
-          # 1. Удаляем старый релиз полностью (это уберет лишние файлы типа geoip.dat)
+          # Полное удаление старого релиза и тега через API для чистоты ассетов и времени
           gh release delete latest --yes || true
-          
-          # 2. Удаляем тег в облаке через API (не через git push, чтобы не было ошибки прав)
           gh api -X DELETE /repos/${{ github.repository }}/git/refs/tags/latest || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -115,7 +120,7 @@ jobs:
           name: "GeoSite Build: ${{ env.RELEASE_DATE }}"
           body: |
             ## 🚀 Manual GeoSite Build
-            **Build Date:** ${{ env.RELEASE_DATE }}
+            **Build Date:** ${{ env.RELEASE_DATE }} (MSK)
             
             ### 📦 Included categories:
             ```
