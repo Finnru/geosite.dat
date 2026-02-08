@@ -1,11 +1,7 @@
-name: Build-GeoIP-Raw
+name: Build-GeoSite-Dat
 
 on:
-  workflow_dispatch: # Позволяет запускать вручную
-  schedule:
-    - cron: "0 0 */1 * *" 
-  push:
-    branches: [master, main]
+  workflow_dispatch: # Только ручной запуск
 
 permissions:
   contents: write
@@ -16,55 +12,134 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Полная история для проверки изменений
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
 
-      - name: Prepare Data (ipdeny.com CIDR)
+      - name: Check for changes in geosite data
+        id: check_changes
         run: |
-          mkdir -p data
-          # Генерируем дату для использования в GitHub Actions
-          echo "RELEASE_DATE=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
+          echo "Checking for changes in geosite data files..."
           
-          echo "Downloading RU IP ranges from ipdeny.com..."
-          # Скачиваем зону с IP-диапазонами для России
-          curl -s -L "https://www.ipdeny.com/ipblocks/data/countries/ru.zone" -o data/ru
+          # Создаем папку если её нет
+          mkdir -p geosite.dat/data
           
-          # Проверяем, что файл не пустой
-          if [ ! -s data/ru ]; then
-            echo "❌ ERROR: Downloaded file is empty!"
+          # Проверяем, есть ли изменения в geosite.dat/data с последнего коммита
+          if git diff --name-only HEAD~1 -- geosite.dat/data/ 2>/dev/null | grep -q .; then
+            echo "Changes detected in geosite data files"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            # Проверяем, существует ли уже geosite.dat
+            if [ -f "geosite.dat" ]; then
+              echo "No changes in geosite data files, geosite.dat already exists"
+              echo "has_changes=false" >> $GITHUB_OUTPUT
+            else
+              echo "No geosite.dat found, will generate"
+              echo "has_changes=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Validate GeoSite Files
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          echo "Validating geosite data files..."
+          cd geosite.dat/data
+          
+          ERROR_COUNT=0
+          
+          for file in *.txt; do
+            if [ -f "$file" ]; then
+              echo "Validating $file..."
+              
+              # Проверяем, что файл не пустой
+              if [ ! -s "$file" ]; then
+                echo "❌ ERROR: $file is empty"
+                ERROR_COUNT=$((ERROR_COUNT + 1))
+                continue
+              fi
+              
+              # Проверяем формат (должен начинаться с геокода)
+              filename_no_ext="${file%.txt}"
+              if ! grep -q "^${filename_no_ext}:" "$file"; then
+                echo "❌ ERROR: $file should start with '${filename_no_ext}:'"
+                ERROR_COUNT=$((ERROR_COUNT + 1))
+              fi
+              
+              # Проверяем наличие запрещённых символов
+              if grep -q "^*" "$file" || grep -q "^@" "$file" || grep -q "^regexp:" "$file"; then
+                echo "⚠️  WARNING: $file contains advanced patterns (regex/domain/attributes)"
+                echo "   These patterns will be included but may require special handling in Xray"
+              fi
+              
+              # Проверяем базовый синтаксис
+              LINE_NUM=0
+              while IFS= read -r line; do
+                LINE_NUM=$((LINE_NUM + 1))
+                line=$(echo "$line" | sed 's/#.*//' | xargs) # Удаляем комментарии и пробелы
+                
+                if [ -z "$line" ]; then
+                  continue
+                fi
+                
+                # Проверяем форматы, которые поддерживает Xray:
+                # 1. domain: (атрибуты)
+                # 2. regexp: (регулярные выражения)
+                # 3. * (домены)
+                # 4. @ (группы ссылок)
+                # 5. ключевое слово full: (все поддомены)
+                
+                if [[ "$line" == *" "* ]] && [[ ! "$line" =~ ^[a-zA-Z]+:[a-zA-Z]+\| ]]; then
+                  echo "⚠️  WARNING: Line $LINE_NUM in $file contains spaces: '$line'"
+                  echo "   Xray geosite format doesn't support spaces except in attributes"
+                fi
+              done < "$file"
+              
+              echo "✅ $file validation completed"
+            fi
+          done
+          
+          if [ $ERROR_COUNT -gt 0 ]; then
+            echo "❌ Validation failed with $ERROR_COUNT error(s)"
             exit 1
           fi
           
-          # Очищаем от пустых строк и комментариев
-          sed -i '/^$/d' data/ru
-          sed -i '/^#/d' data/ru
-          
-          echo "Found $(wc -l < data/ru) RU ranges."
-          echo "Sample of first 5 ranges:"
-          head -5 data/ru
+          echo "✅ All geosite files validated successfully"
 
-      - name: Create Generator Script
+      - name: Create GeoSite Generator Script
+        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
-          cat <<EOF > builder.go
+          echo "Creating geosite generator script..."
+          
+          cat << 'EOF' > generate_geosite.go
           package main
+          
           import (
           	"bufio"
           	"encoding/binary"
           	"fmt"
           	"log"
-          	"net"
           	"os"
           	"path/filepath"
+          	"sort"
           	"strings"
           )
+          
+          type Site struct {
+          	Type  string
+          	Value string
+          	Attrs []string
+          }
+          
           func writeVarint(v uint32) []byte {
           	var buf [binary.MaxVarintLen32]byte
           	n := binary.PutUvarint(buf[:], uint64(v))
           	return buf[:n]
           }
+          
           func encodeField(num int, wireType int, data []byte) []byte {
           	tag := uint32((num << 3) | wireType)
           	res := writeVarint(tag)
@@ -74,94 +149,262 @@ jobs:
           	res = append(res, data...)
           	return res
           }
-          func main() {
-          	var allEntries []byte
-          	files, err := os.ReadDir("./data")
-          	if err != nil { log.Fatal(err) }
-          	for _, f := range files {
-          		if f.IsDir() { continue }
-          		tag := strings.ToUpper(f.Name())
-          		fmt.Printf("Packing tag: %s\n", tag)
-          		var cidrsData []byte
-          		file, _ := os.Open(filepath.Join("./data", f.Name()))
-          		scanner := bufio.NewScanner(file)
-          		for scanner.Scan() {
-          			line := strings.TrimSpace(scanner.Text())
-          			if line == "" || strings.HasPrefix(line, "#") { continue }
-          			_, ipnet, err := net.ParseCIDR(line)
-          			if err == nil {
-          				ip := ipnet.IP.To4()
-          				if ip == nil { ip = ipnet.IP.To16() }
-          				mask, _ := ipnet.Mask.Size()
-          				c := encodeField(1, 2, ip)
-          				c = append(c, encodeField(2, 0, writeVarint(uint32(mask)))...)
-          				cidrsData = append(cidrsData, encodeField(2, 2, c)...)
+          
+          func encodeString(s string) []byte {
+          	return encodeField(1, 2, []byte(s))
+          }
+          
+          func parseLine(line string) (string, *Site) {
+          	line = strings.TrimSpace(line)
+          	if line == "" || strings.HasPrefix(line, "#") {
+          		return "", nil
+          	}
+          	
+          	// Разделяем на части
+          	parts := strings.SplitN(line, " ", 2)
+          	pattern := parts[0]
+          	var attrs []string
+          	if len(parts) > 1 {
+          		attrStr := parts[1]
+          		attrParts := strings.Split(attrStr, " ")
+          		for _, attr := range attrParts {
+          			attr = strings.TrimSpace(attr)
+          			if attr != "" {
+          				attrs = append(attrs, attr)
           			}
           		}
-          		file.Close()
-          		geoIPData := encodeField(1, 2, []byte(tag))
-          		geoIPData = append(geoIPData, cidrsData...)
-          		allEntries = append(allEntries, encodeField(1, 2, geoIPData)...)
           	}
-          	os.WriteFile("geoip.dat", allEntries, 0644)
-          	fmt.Printf("Generated geoip.dat with %d bytes\n", len(allEntries))
+          	
+          	// Определяем тип паттерна
+          	var patternType, patternValue string
+          	
+          	if strings.HasPrefix(pattern, "domain:") {
+          		patternType = "domain"
+          		patternValue = strings.TrimPrefix(pattern, "domain:")
+          	} else if strings.HasPrefix(pattern, "regexp:") {
+          		patternType = "regexp"
+          		patternValue = strings.TrimPrefix(pattern, "regexp:")
+          	} else if strings.HasPrefix(pattern, "full:") {
+          		patternType = "full"
+          		patternValue = strings.TrimPrefix(pattern, "full:")
+          	} else if pattern == "@" {
+          		patternType = "reference"
+          		patternValue = "@"
+          	} else if strings.HasPrefix(pattern, "@") {
+          		patternType = "reference"
+          		patternValue = strings.TrimPrefix(pattern, "@")
+          	} else {
+          		patternType = "domain"
+          		patternValue = pattern
+          	}
+          	
+          	return pattern, &Site{
+          		Type:  patternType,
+          		Value: patternValue,
+          		Attrs: attrs,
+          	}
+          }
+          
+          func encodeSite(site *Site) []byte {
+          	var data []byte
+          	
+          	// Тип паттерна
+          	data = append(data, encodeField(1, 2, []byte(site.Type))...)
+          	
+          	// Значение паттерна
+          	data = append(data, encodeField(2, 2, []byte(site.Value))...)
+          	
+          	// Атрибуты
+          	for _, attr := range site.Attrs {
+          		data = append(data, encodeField(3, 2, []byte(attr))...)
+          	}
+          	
+          	return data
+          }
+          
+          func main() {
+          	dataDir := "geosite.dat/data"
+          	outputFile := "geosite.dat"
+          	
+          	// Читаем все файлы в директории
+          	files, err := os.ReadDir(dataDir)
+          	if err != nil {
+          		log.Fatalf("Failed to read data directory: %v", err)
+          	}
+          	
+          	var allEntries []byte
+          	
+          	for _, f := range files {
+          		if f.IsDir() || !strings.HasSuffix(f.Name(), ".txt") {
+          			continue
+          		}
+          		
+          		geoCode := strings.TrimSuffix(f.Name(), ".txt")
+          		fmt.Printf("Processing: %s\n", geoCode)
+          		
+          		filePath := filepath.Join(dataDir, f.Name())
+          		file, err := os.Open(filePath)
+          		if err != nil {
+          			log.Printf("Warning: Failed to open %s: %v", filePath, err)
+          			continue
+          		}
+          		
+          		var sites []*Site
+          		scanner := bufio.NewScanner(file)
+          		
+          		for scanner.Scan() {
+          			line := scanner.Text()
+          			pattern, site := parseLine(line)
+          			if site != nil && pattern != "" {
+          				sites = append(sites, site)
+          			}
+          		}
+          		
+          		file.Close()
+          		
+          		if err := scanner.Err(); err != nil {
+          			log.Printf("Warning: Error reading %s: %v", filePath, err)
+          		}
+          		
+          		// Сортируем сайты для детерминированного вывода
+          		sort.Slice(sites, func(i, j int) bool {
+          			if sites[i].Type != sites[j].Type {
+          				return sites[i].Type < sites[j].Type
+          			}
+          			return sites[i].Value < sites[j].Value
+          		})
+          		
+          		// Кодируем данные для этой геозоны
+          		var geoData []byte
+          		
+          		// Геокод
+          		geoData = append(geoData, encodeField(1, 2, []byte(geoCode))...)
+          		
+          		// Сайты
+          		for _, site := range sites {
+          			siteData := encodeSite(site)
+          			geoData = append(geoData, encodeField(2, 2, siteData)...)
+          		}
+          		
+          		// Добавляем в общий список
+          		allEntries = append(allEntries, encodeField(1, 2, geoData)...)
+          		
+          		fmt.Printf("  Added %d sites for %s\n", len(sites), geoCode)
+          	}
+          	
+          	// Записываем в файл
+          	if err := os.WriteFile(outputFile, allEntries, 0644); err != nil {
+          		log.Fatalf("Failed to write output file: %v", err)
+          	}
+          	
+          	fmt.Printf("\n✅ Successfully generated %s\n", outputFile)
+          	fmt.Printf("📊 Total size: %d bytes\n", len(allEntries))
           }
           EOF
 
-      - name: Run Generator
-        run: go run builder.go
-
-      - name: Verify Generated File
+      - name: Generate GeoSite Binary
+        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
-          echo "Checking generated file..."
-          if [ ! -f geoip.dat ] || [ ! -s geoip.dat ]; then
-            echo "❌ ERROR: geoip.dat was not generated or is empty!"
+          echo "Generating geosite.dat binary file..."
+          go run generate_geosite.go
+          
+          # Проверяем созданный файл
+          if [ ! -f "geosite.dat" ] || [ ! -s "geosite.dat" ]; then
+            echo "❌ ERROR: geosite.dat was not generated or is empty!"
             exit 1
           fi
-          echo "✅ geoip.dat size: $(wc -c < geoip.dat) bytes"
+          
+          echo "✅ geosite.dat generated successfully"
+          echo "📏 File size: $(wc -c < geosite.dat) bytes"
 
       - name: Generate Checksum
-        run: sha256sum geoip.dat > geoip.dat.sha256sum
-
-      - name: Display Checksum
+        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
+          sha256sum geosite.dat > geosite.dat.sha256sum
           echo "SHA256 Checksum:"
-          cat geoip.dat.sha256sum
+          cat geosite.dat.sha256sum
 
-      - name: Commit and Push Data
+      - name: Set Release Date
+        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add data/ru
-          git commit -m "Update RU IPs [${{ env.RELEASE_DATE }}]" || echo "No changes"
-          git push
+          RELEASE_DATE=$(date +'%Y-%m-%d %H:%M')
+          echo "RELEASE_DATE=${RELEASE_DATE}" >> $GITHUB_ENV
+          
+          # Подсчитываем статистику
+          cd geosite.dat/data
+          TOTAL_FILES=$(ls *.txt 2>/dev/null | wc -l)
+          TOTAL_LINES=0
+          for file in *.txt; do
+            if [ -f "$file" ]; then
+              LINES=$(grep -v '^#' "$file" | grep -v '^$' | wc -l)
+              TOTAL_LINES=$((TOTAL_LINES + LINES))
+            fi
+          done
+          
+          echo "STATS_FILES=${TOTAL_FILES}" >> $GITHUB_ENV
+          echo "STATS_LINES=${TOTAL_LINES}" >> $GITHUB_ENV
+
+      - name: Skip Generation (No Changes)
+        if: steps.check_changes.outputs.has_changes == 'false'
+        run: |
+          echo "⏭️  No changes detected in geosite data files"
+          echo "Skipping binary generation"
+          echo "Using existing geosite.dat"
 
       - name: Delete Old Release Tag
         run: |
-          # Удаляем локальный и удаленный тег, чтобы форсировать обновление даты релиза
-          git tag -d latest || true
-          git push origin :refs/tags/latest || true
+          # Удаляем локальный и удаленный тег latest
+          git tag -d latest 2>/dev/null || true
+          git push origin :refs/tags/latest 2>/dev/null || true
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
-        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
         with:
           tag_name: latest
-          name: "GeoIP Build: ${{ env.RELEASE_DATE }}"
+          name: "GeoSite Build: $(date +'%Y-%m-%d %H:%M')"
           body: |
-            Обновлено автоматически раз в 3 дня.
+            ## GeoSite Data Build
             
-            **Источник:** ipdeny.com
-            **Страна:** RU (Россия)
-            **Диапазонов:** $(wc -l < data/ru)
-            **Дата сборки:** ${{ env.RELEASE_DATE }}
+            **Дата сборки:** $(date +'%Y-%m-%d %H:%M')
+            **Файлов конфигурации:** ${{ env.STATS_FILES || 'N/A' }}
+            **Всего записей:** ${{ env.STATS_LINES || 'N/A' }}
             
-            Файл `geoip.dat` содержит бинарную базу IP-диапазонов в формате Protocol Buffers.
+            ### Формат файлов:
+            Файлы в `geosite.dat/data/` должны соответствовать формату Xray GeoSite:
+            
+            ```
+            geocode:
+            domain:example.com @attr1 @attr2
+            full:example.org
+            regexp:^https?://.*\.example\.com/
+            @another-list
+            ```
+            
+            ### Использование с Xray:
+            ```json
+            {
+              "routing": {
+                "rules": [
+                  {
+                    "type": "field",
+                    "outboundTag": "direct",
+                    "domain": ["geosite:category-name"]
+                  }
+                ]
+              }
+            }
+            ```
+            
+            ### Проверка целостности:
+            ```
+            sha256sum: $(sha256sum geosite.dat | cut -d' ' -f1)
+            ```
           draft: false
           prerelease: false
           make_latest: true
           files: |
-            geoip.dat
-            geoip.dat.sha256sum
+            geosite.dat
+            geosite.dat.sha256sum
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
