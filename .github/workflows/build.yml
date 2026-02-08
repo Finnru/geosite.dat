@@ -22,23 +22,29 @@ jobs:
         with:
           go-version: '1.24'
 
-      - name: Prepare Data (IP2Location CIDR)
+      - name: Prepare Data (ipdeny.com CIDR)
         run: |
           mkdir -p data
           # Генерируем дату для использования в GitHub Actions
           echo "RELEASE_DATE=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
           
-          TOKEN="${{ secrets.IP2LOCATION_TOKEN }}"
+          echo "Downloading RU IP ranges from ipdeny.com..."
+          # Скачиваем зону с IP-диапазонами для России
+          curl -s -L "https://www.ipdeny.com/ipblocks/data/countries/ru.zone" -o data/ru
           
-          echo "Downloading IP2Location DB11LITECIDR..."
-          curl -L -A "Mozilla/5.0" "https://www.ip2location.com/download/?token=${TOKEN}&file=DB11LITECIDR" -o db.zip
-
-          unzip -o db.zip
-          CSV_FILE=$(ls *.CSV 2>/dev/null | grep -i "CIDR" | head -n 1)
+          # Проверяем, что файл не пустой
+          if [ ! -s data/ru ]; then
+            echo "❌ ERROR: Downloaded file is empty!"
+            exit 1
+          fi
           
-          # Парсим RU
-          awk -F',' '$2 ~ /"RU"/ {gsub(/"/, "", $1); print $1}' "$CSV_FILE" > data/ru
+          # Очищаем от пустых строк и комментариев
+          sed -i '/^$/d' data/ru
+          sed -i '/^#/d' data/ru
+          
           echo "Found $(wc -l < data/ru) RU ranges."
+          echo "Sample of first 5 ranges:"
+          head -5 data/ru
 
       - name: Create Generator Script
         run: |
@@ -98,14 +104,29 @@ jobs:
           		allEntries = append(allEntries, encodeField(1, 2, geoIPData)...)
           	}
           	os.WriteFile("geoip.dat", allEntries, 0644)
+          	fmt.Printf("Generated geoip.dat with %d bytes\n", len(allEntries))
           }
           EOF
 
       - name: Run Generator
         run: go run builder.go
 
+      - name: Verify Generated File
+        run: |
+          echo "Checking generated file..."
+          if [ ! -f geoip.dat ] || [ ! -s geoip.dat ]; then
+            echo "❌ ERROR: geoip.dat was not generated or is empty!"
+            exit 1
+          fi
+          echo "✅ geoip.dat size: $(wc -c < geoip.dat) bytes"
+
       - name: Generate Checksum
         run: sha256sum geoip.dat > geoip.dat.sha256sum
+
+      - name: Display Checksum
+        run: |
+          echo "SHA256 Checksum:"
+          cat geoip.dat.sha256sum
 
       - name: Commit and Push Data
         run: |
@@ -127,7 +148,15 @@ jobs:
         with:
           tag_name: latest
           name: "GeoIP Build: ${{ env.RELEASE_DATE }}"
-          body: "Обновлено автоматически раз в 3 дня. Источник: IP2Location LITE."
+          body: |
+            Обновлено автоматически раз в 3 дня.
+            
+            **Источник:** ipdeny.com
+            **Страна:** RU (Россия)
+            **Диапазонов:** $(wc -l < data/ru)
+            **Дата сборки:** ${{ env.RELEASE_DATE }}
+            
+            Файл `geoip.dat` содержит бинарную базу IP-диапазонов в формате Protocol Buffers.
           draft: false
           prerelease: false
           make_latest: true
