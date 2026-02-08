@@ -1,7 +1,7 @@
 name: Build-GeoSite-Manual
 
 on:
-  workflow_dispatch: # Только ручной запуск кнопкой
+  workflow_dispatch: # Запуск только вручную
 
 permissions:
   contents: write
@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Важно для корректной работы с тегами
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -20,10 +22,11 @@ jobs:
 
       - name: Prepare Environment
         run: |
-          # Создаем папку data, если вы забыли её создать
           mkdir -p data
-          # Генерируем дату сборки
-          echo "RELEASE_DATE=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
+          # Устанавливаем московское время для переменной RELEASE_DATE
+          echo "RELEASE_DATE=$(TZ='Europe/Moscow' date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
+          echo "📊 Files to pack:"
+          ls data/
 
       - name: Create Generator Script
         run: |
@@ -56,53 +59,36 @@ jobs:
           	var allEntries []byte
           	files, err := os.ReadDir("./data")
           	if err != nil { log.Fatal(err) }
-          	
           	for _, f := range files {
           		if f.IsDir() || strings.HasPrefix(f.Name(), ".") { continue }
-          		
           		tagName := strings.ToLower(f.Name())
           		fmt.Printf("Packing category: %s\n", tagName)
-          		
           		var sitesData []byte
           		file, _ := os.Open(filepath.Join("./data", f.Name()))
           		scanner := bufio.NewScanner(file)
-          		
           		for scanner.Scan() {
           			line := strings.TrimSpace(scanner.Text())
-          			// Игнорируем комментарии и пустые строки
           			if line == "" || strings.HasPrefix(line, "#") { continue }
-          			
-          			// Обрабатываем префиксы (domain:, full:, regexp:, keyword:)
-          			// Если префикса нет, по умолчанию считаем "domain"
           			domainType := "domain"
           			domainValue := line
-          			
           			if strings.Contains(line, ":") {
           				parts := strings.SplitN(line, ":", 2)
-          				if parts[0] == "domain" || parts[0] == "full" || parts[0] == "regexp" || parts[0] == "keyword" {
-          					domainType = parts[0]
+          				prefix := parts[0]
+          				if prefix == "domain" || prefix == "full" || prefix == "regexp" || prefix == "keyword" {
+          					domainType = prefix
           					domainValue = parts[1]
           				}
           			}
-
-          			// Кодируем запись Site
           			siteEntry := encodeField(1, 2, []byte(domainType))
           			siteEntry = append(siteEntry, encodeField(2, 2, []byte(domainValue))...)
-          			
-          			// Добавляем Site в список сайтов этой категории
           			sitesData = append(sitesData, encodeField(2, 2, siteEntry)...)
           		}
           		file.Close()
-
-          		// Кодируем структуру GeoSite (Name + List of Sites)
           		geoSite := encodeField(1, 2, []byte(tagName))
           		geoSite = append(geoSite, sitesData...)
-          		
-          		// Добавляем в общий список GeoSiteList
           		allEntries = append(allEntries, encodeField(1, 2, geoSite)...)
           	}
           	os.WriteFile("geosite.dat", allEntries, 0644)
-          	fmt.Println("Success: geosite.dat generated.")
           }
           EOF
 
@@ -112,14 +98,29 @@ jobs:
       - name: Generate Checksum
         run: sha256sum geosite.dat > geosite.dat.sha256sum
 
+      - name: Re-create Release Tag
+        run: |
+          # Удаляем старый тег локально и удаленно, чтобы сбросить время в GitHub
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git tag -d latest || true
+          git push origin :refs/tags/latest || true
+          git tag latest
+          git push origin latest
+
       - name: Update Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: "GeoSite Build: ${{ env.RELEASE_DATE }}"
           body: |
-            Manual build of geosite.dat.
-            Included categories: $(ls data | xargs)
+            ## 🚀 Manual GeoSite Build
+            **Build Date:** ${{ env.RELEASE_DATE }}
+            
+            ### 📦 Included categories:
+            ```
+            $(ls data/)
+            ```
           draft: false
           prerelease: false
           make_latest: true
