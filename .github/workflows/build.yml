@@ -66,8 +66,8 @@ jobs:
           		// ПРИНУДИТЕЛЬНЫЙ ВЕРХНИЙ РЕГИСТР
           		tagName := strings.ToUpper(f.Name())
           		
-          		// Печатаем в лог именно то, что уходит в файл для проверки
-          		fmt.Printf("Writing to DAT category name: [%s]\n", tagName)
+          		// Изменил текст лога на "UPPERCASE Pack:", чтобы убедиться в обновлении
+          		fmt.Printf("UPPERCASE Pack: %s\n", tagName)
           		
           		var domainsBytes []byte
           		file, _ := os.Open(filepath.Join("./data", f.Name()))
@@ -87,7 +87,7 @@ jobs:
           	}
 
           	os.WriteFile("geosite.dat", allGeoSites, 0644)
-          	fmt.Println("✅ Done. Check the logs above for 'Writing to DAT' names.")
+          	fmt.Println("✅ Generation complete.")
           }
           EOF
 
