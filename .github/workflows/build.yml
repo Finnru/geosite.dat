@@ -1,7 +1,7 @@
-name: Build-GeoSite-Dat
+name: Build-GeoSite-Manual
 
 on:
-  workflow_dispatch: # Только ручной запуск
+  workflow_dispatch: # Только ручной запуск кнопкой
 
 permissions:
   contents: write
@@ -18,77 +18,17 @@ jobs:
         with:
           go-version: '1.24'
 
-      - name: Check Data Files
-        id: check_data
+      - name: Prepare Environment
         run: |
-          echo "Checking data directory..."
-          
-          if [ -d "data" ] && [ "$(ls -A data 2>/dev/null)" ]; then
-            echo "✅ Found data directory with files"
-            echo "has_data=true" >> $GITHUB_OUTPUT
-            echo "data_dir=data" >> $GITHUB_OUTPUT
-            
-            echo "Files in data/:"
-            ls -la data/
-          else
-            echo "❌ ERROR: No data directory or empty"
-            echo "has_data=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
+          # Создаем папку data, если вы забыли её создать
+          mkdir -p data
+          # Генерируем дату сборки
+          echo "RELEASE_DATE=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
 
-      - name: Validate GeoSite Files
+      - name: Create Generator Script
         run: |
-          echo "Validating geosite data files..."
-          cd data
-          
-          ERROR_COUNT=0
-          FILE_COUNT=0
-          
-          echo "Files found:"
-          for file in *; do
-            if [ -f "$file" ] && [ ! -d "$file" ]; then
-              FILE_COUNT=$((FILE_COUNT + 1))
-              echo "📄 $file"
-              
-              # Базовая проверка
-              if [ ! -s "$file" ]; then
-                echo "  ❌ ERROR: File is empty"
-                ERROR_COUNT=$((ERROR_COUNT + 1))
-                continue
-              fi
-              
-              # Проверяем первую строку
-              FIRST_LINE=$(head -1 "$file" | xargs)
-              if [[ ! "$FIRST_LINE" =~ ^[a-zA-Z0-9_-]+:$ ]]; then
-                echo "  ⚠️  WARNING: First line should be 'category-name:'"
-                echo "    Found: '$FIRST_LINE'"
-              else
-                CATEGORY="${FIRST_LINE%:}"
-                echo "  ✅ Category: $CATEGORY"
-              fi
-            fi
-          done
-          
-          if [ "$FILE_COUNT" -eq 0 ]; then
-            echo "❌ ERROR: No files found in data/"
-            exit 1
-          fi
-          
-          if [ $ERROR_COUNT -gt 0 ]; then
-            echo "❌ Validation failed with $ERROR_COUNT error(s)"
-            exit 1
-          fi
-          
-          echo ""
-          echo "✅ Validation complete: $FILE_COUNT files found"
-
-      - name: Create GeoSite Generator Script
-        run: |
-          echo "Creating geosite generator script for data/ directory..."
-          
-          cat << 'EOF' > generate_geosite.go
+          cat <<EOF > builder.go
           package main
-          
           import (
           	"bufio"
           	"encoding/binary"
@@ -96,22 +36,13 @@ jobs:
           	"log"
           	"os"
           	"path/filepath"
-          	"sort"
           	"strings"
           )
-          
-          type Site struct {
-          	Type  string
-          	Value string
-          	Attrs []string
-          }
-          
           func writeVarint(v uint32) []byte {
           	var buf [binary.MaxVarintLen32]byte
           	n := binary.PutUvarint(buf[:], uint64(v))
           	return buf[:n]
           }
-          
           func encodeField(num int, wireType int, data []byte) []byte {
           	tag := uint32((num << 3) | wireType)
           	res := writeVarint(tag)
@@ -121,271 +52,78 @@ jobs:
           	res = append(res, data...)
           	return res
           }
-          
-          func parseLine(line string, lineNum int) (string, *Site) {
-          	line = strings.TrimSpace(line)
-          	if line == "" || strings.HasPrefix(line, "#") {
-          		return "", nil
-          	}
-          	
-          	// Первая строка - название категории
-          	if lineNum == 0 && strings.HasSuffix(line, ":") {
-          		return line, nil
-          	}
-          	
-          	parts := strings.SplitN(line, " ", 2)
-          	pattern := parts[0]
-          	var attrs []string
-          	
-          	if len(parts) > 1 {
-          		attrStr := parts[1]
-          		attrParts := strings.Split(attrStr, " ")
-          		for _, attr := range attrParts {
-          			attr = strings.TrimSpace(attr)
-          			if attr != "" && strings.HasPrefix(attr, "@") {
-          				attrs = append(attrs, strings.TrimPrefix(attr, "@"))
-          			}
-          		}
-          	}
-          	
-          	var patternType, patternValue string
-           
-          	switch {
-          	case strings.HasPrefix(pattern, "domain:"):
-          		patternType = "domain"
-          		patternValue = strings.TrimPrefix(pattern, "domain:")
-          	case strings.HasPrefix(pattern, "regexp:"):
-          		patternType = "regexp"
-          		patternValue = strings.TrimPrefix(pattern, "regexp:")
-          	case strings.HasPrefix(pattern, "full:"):
-          		patternType = "full"
-          		patternValue = strings.TrimPrefix(pattern, "full:")
-          	case strings.HasPrefix(pattern, "keyword:"):
-          		patternType = "keyword"
-          		patternValue = strings.TrimPrefix(pattern, "keyword:")
-          	case pattern == "@":
-          		patternType = "reference"
-          		patternValue = "@"
-          	case strings.HasPrefix(pattern, "@"):
-          		patternType = "reference"
-          		patternValue = strings.TrimPrefix(pattern, "@")
-          	default:
-          		patternType = "domain"
-          		patternValue = pattern
-          	}
-          	
-          	return pattern, &Site{
-          		Type:  patternType,
-          		Value: patternValue,
-          		Attrs: attrs,
-          	}
-          }
-          
-          func encodeSite(site *Site) []byte {
-          	var data []byte
-          	data = append(data, encodeField(1, 2, []byte(site.Type))...)
-          	data = append(data, encodeField(2, 2, []byte(site.Value))...)
-          	for _, attr := range site.Attrs {
-          		data = append(data, encodeField(3, 2, []byte(attr))...)
-          	}
-          	return data
-          }
-          
           func main() {
-          	dataDir := "data"  // <-- ИЗМЕНЕНО: корневая папка data
-          	outputFile := "geosite.dat"
-           
-          	entries, err := os.ReadDir(dataDir)
-          	if err != nil {
-          		log.Fatalf("Failed to read data directory: %v", err)
-          	}
-          	
           	var allEntries []byte
-          	typeStats := make(map[string]int)
-          	totalSites := 0
-           
-          	for _, entry := range entries {
-          		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
-          			continue
-          		}
-           
-          		categoryName := entry.Name()
-          		fmt.Printf("📁 Processing: %s\n", categoryName)
-           
-          		filePath := filepath.Join(dataDir, entry.Name())
-          		file, err := os.Open(filePath)
-          		if err != nil {
-          			log.Printf("Warning: Failed to open %s: %v", filePath, err)
-          			continue
-          		}
-           
-          		var sites []*Site
-          		scanner := bufio.NewScanner(file)
-          		lineNum := 0
-           
-          		for scanner.Scan() {
-          			pattern, site := parseLine(scanner.Text(), lineNum)
-          			lineNum++
-                  if site != nil && pattern != "" {
-                    sites = append(sites, site)
-                    typeStats[site.Type]++
-                  }
-          		}
-           
-          		file.Close()
-           
-          		if err := scanner.Err(); err != nil {
-          			log.Printf("Warning: Error reading %s: %v", filePath, err)
-          		}
-           
-          		sort.Slice(sites, func(i, j int) bool {
-          			if sites[i].Type != sites[j].Type {
-          				return sites[i].Type < sites[j].Type
-          			}
-          			return sites[i].Value < sites[j].Value
-          		})
-           
-          		var geoData []byte
-          		geoData = append(geoData, encodeField(1, 2, []byte(categoryName))...)
-           
-          		for _, site := range sites {
-          			siteData := encodeSite(site)
-          			geoData = append(geoData, encodeField(2, 2, siteData)...)
-          		}
-           
-          		allEntries = append(allEntries, encodeField(1, 2, geoData)...)
-          		fmt.Printf("  ✅ Added %d patterns\n", len(sites))
-          		totalSites += len(sites)
-          	}
-           
-          	if err := os.WriteFile(outputFile, allEntries, 0644); err != nil {
-          		log.Fatalf("Failed to write output file: %v", err)
-          	}
-           
-          	fmt.Printf("\n🎉 Generated %s from %s/\n", outputFile, dataDir)
-          	fmt.Printf("📊 Size: %d bytes\n", len(allEntries))
-          	fmt.Printf("📈 Statistics:\n")
-          	fmt.Printf("  Categories: %d\n", len(entries))
-          	fmt.Printf("  Total patterns: %d\n", totalSites)
+          	files, err := os.ReadDir("./data")
+          	if err != nil { log.Fatal(err) }
           	
-          	for typ, count := range typeStats {
-          		fmt.Printf("  %-10s: %d\n", typ, count)
+          	for _, f := range files {
+          		if f.IsDir() || strings.HasPrefix(f.Name(), ".") { continue }
+          		
+          		tagName := strings.ToLower(f.Name())
+          		fmt.Printf("Packing category: %s\n", tagName)
+          		
+          		var sitesData []byte
+          		file, _ := os.Open(filepath.Join("./data", f.Name()))
+          		scanner := bufio.NewScanner(file)
+          		
+          		for scanner.Scan() {
+          			line := strings.TrimSpace(scanner.Text())
+          			// Игнорируем комментарии и пустые строки
+          			if line == "" || strings.HasPrefix(line, "#") { continue }
+          			
+          			// Обрабатываем префиксы (domain:, full:, regexp:, keyword:)
+          			// Если префикса нет, по умолчанию считаем "domain"
+          			domainType := "domain"
+          			domainValue := line
+          			
+          			if strings.Contains(line, ":") {
+          				parts := strings.SplitN(line, ":", 2)
+          				if parts[0] == "domain" || parts[0] == "full" || parts[0] == "regexp" || parts[0] == "keyword" {
+          					domainType = parts[0]
+          					domainValue = parts[1]
+          				}
+          			}
+
+          			// Кодируем запись Site
+          			siteEntry := encodeField(1, 2, []byte(domainType))
+          			siteEntry = append(siteEntry, encodeField(2, 2, []byte(domainValue))...)
+          			
+          			// Добавляем Site в список сайтов этой категории
+          			sitesData = append(sitesData, encodeField(2, 2, siteEntry)...)
+          		}
+          		file.Close()
+
+          		// Кодируем структуру GeoSite (Name + List of Sites)
+          		geoSite := encodeField(1, 2, []byte(tagName))
+          		geoSite = append(geoSite, sitesData...)
+          		
+          		// Добавляем в общий список GeoSiteList
+          		allEntries = append(allEntries, encodeField(1, 2, geoSite)...)
           	}
+          	os.WriteFile("geosite.dat", allEntries, 0644)
+          	fmt.Println("Success: geosite.dat generated.")
           }
           EOF
 
-      - name: Generate GeoSite Binary
-        run: |
-          echo "Generating geosite.dat from data/ directory..."
-          go run generate_geosite.go
-          
-          if [ ! -f "geosite.dat" ] || [ ! -s "geosite.dat" ]; then
-            echo "❌ ERROR: geosite.dat was not generated or is empty!"
-            exit 1
-          fi
-          
-          echo "✅ geosite.dat generated successfully"
-          echo "📏 File size: $(wc -c < geosite.dat) bytes"
-          
-          # Показываем структуру
-          echo ""
-          echo "📁 Input structure:"
-          echo "data/"
-          for file in data/*; do
-            if [ -f "$file" ]; then
-              lines=$(grep -v '^#' "$file" | grep -v '^$' | wc -l)
-              echo "  ├── $(basename "$file") ($((lines-1)) patterns)"
-            fi
-          done
+      - name: Run Generator
+        run: go run builder.go
 
       - name: Generate Checksum
-        run: |
-          sha256sum geosite.dat > geosite.dat.sha256sum
-          echo "SHA256 Checksum:"
-          cat geosite.dat.sha256sum
+        run: sha256sum geosite.dat > geosite.dat.sha256sum
 
-      - name: Set Release Date and Stats
-        run: |
-          RELEASE_DATE=$(date +'%Y-%m-%d %H:%M')
-          echo "RELEASE_DATE=${RELEASE_DATE}" >> $GITHUB_ENV
-          
-          cd data
-          TOTAL_FILES=$(find . -maxdepth 1 -type f ! -name ".*" | wc -l)
-          TOTAL_LINES=0
-          
-          for file in *; do
-            if [ -f "$file" ] && [ ! -d "$file" ]; then
-              LINES=$(tail -n +2 "$file" | grep -v '^#' | grep -v '^$' | wc -l)
-              TOTAL_LINES=$((TOTAL_LINES + LINES))
-            fi
-          done
-          
-          echo "STATS_FILES=${TOTAL_FILES}" >> $GITHUB_ENV
-          echo "STATS_LINES=${TOTAL_LINES}" >> $GITHUB_ENV
-          
-          echo "📊 Statistics:"
-          echo "  Files: $TOTAL_FILES"
-          echo "  Patterns: $TOTAL_LINES"
-
-      - name: Delete Old Release Tag
-        run: |
-          git fetch --tags 2>/dev/null || true
-          git tag -d latest 2>/dev/null || true
-          git push origin :refs/tags/latest 2>/dev/null || true
-
-      - name: Create Release
+      - name: Update Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: "GeoSite Build: $(date +'%Y-%m-%d %H:%M')"
+          name: "GeoSite Build: ${{ env.RELEASE_DATE }}"
           body: |
-            ## 🗺️ GeoSite Data Build
-            
-            **Дата сборки:** $(date +'%Y-%m-%d %H:%M')
-            **Категорий:** ${{ env.STATS_FILES || 'N/A' }}
-            **Всего паттернов:** ${{ env.STATS_LINES || 'N/A' }}
-            
-            ### 📁 Структура исходных данных:
-            Файлы без расширения в `data/`:
-            ```
-            data/
-            ├── google      # Категория "google"
-            ├── telegram    # Категория "telegram"
-            └── category-ru # Категория "category-ru"
-            ```
-            
-            ### 📝 Формат файлов:
-            ```txt
-            category-name:     # Первая строка
-            domain:example.com
-            full:example.org
-            keyword:tracking
-            *.example.net
-            @other-category
-            ```
-            
-            ### ⚙️ Использование с Xray:
-            ```json
-            {
-              "routing": {
-                "rules": [
-                  {
-                    "type": "field",
-                    "outboundTag": "proxy",
-                    "domain": ["geosite:google", "geosite:telegram"]
-                  }
-                ]
-              }
-            }
-            ```
-            
-            ### 🔒 Проверка целостности:
-            ```
-            sha256sum: $(cat geosite.dat.sha256sum | cut -d' ' -f1)
-            ```
+            Manual build of geosite.dat.
+            Included categories: $(ls data | xargs)
           draft: false
           prerelease: false
           make_latest: true
+          force_update_tag: true
           files: |
             geosite.dat
             geosite.dat.sha256sum
