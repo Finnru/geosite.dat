@@ -98,17 +98,17 @@ jobs:
       - name: Generate Checksum
         run: sha256sum geosite.dat > geosite.dat.sha256sum
 
-      - name: Re-create Release Tag
+      - name: Cleanup and Update Release
         run: |
-          # Удаляем старый тег локально и удаленно, чтобы сбросить время в GitHub
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git tag -d latest || true
-          git push origin :refs/tags/latest || true
-          git tag latest
-          git push origin latest
+          # 1. Удаляем старый релиз полностью (это уберет лишние файлы типа geoip.dat)
+          gh release delete latest --yes || true
+          
+          # 2. Удаляем тег в облаке через API (не через git push, чтобы не было ошибки прав)
+          gh api -X DELETE /repos/${{ github.repository }}/git/refs/tags/latest || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update Release
+      - name: Create Fresh Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
@@ -124,7 +124,6 @@ jobs:
           draft: false
           prerelease: false
           make_latest: true
-          # Удаляет старые файлы из релиза перед загрузкой новых
           files: |
             geosite.dat
             geosite.dat.sha256sum
