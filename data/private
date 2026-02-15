@@ -1,10 +1,10 @@
-"keyword:example"
-"keyword:internal"
-"keyword:invalid"
-"keyword:lan"
-"keyword:local"
-"keyword:localdomain"
-"keyword:localhost"
-"regex":"^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$"
-"regexp:in-addr\\.arpa$"
+keyword:example
+keyword:internal
+keyword:invalid
+keyword:lan
+keyword:local
+keyword:localdomain
+keyword:localhost
+regexp:^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+regexp:in-addr\\.arpa$
 
