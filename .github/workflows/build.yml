@@ -17,22 +17,19 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
-
-      - name: Install Generator
-        run: go install v2ray.com/core/infra/control/main/command@latest
+          cache: true
 
       - name: Build geosite.dat
         run: |
-          # Устанавливаем официальный компилятор доменов
+          # 1. Устанавливаем официальный компилятор
           go install github.com/v2fly/domain-list-community@latest
           
-          # Запускаем сборку:
-          # --datapath указывает на папку с вашими категориями (data)
-          # Опция export-lists не нужна, нам нужен только бинарник
-          domain-list-community --datapath=./data
+          # 2. Собираем файл. 
+          # Компилятор ищет файлы в директории, указанной в --datapath
+          # По умолчанию он сохраняет результат в файл dlc.dat
+          $(go env GOPATH)/bin/domain-list-community --datapath=./data
           
-          # По умолчанию утилита создает файл dlc.dat в папке пуска
-          # Переименовываем его в нужный нам geosite.dat
+          # 3. Проверяем и переименовываем
           if [ -f "dlc.dat" ]; then
             mv dlc.dat geosite.dat
             echo "✅ geosite.dat успешно собран"
@@ -52,6 +49,6 @@ jobs:
           gh api -X DELETE /repos/${{ github.repository }}/git/refs/tags/latest || true
           gh release create latest geosite.dat geosite.dat.sha256sum \
             --title "GeoSite Build: $(TZ='Europe/Moscow' date +'%Y-%m-%d %H:%M')" \
-            --notes "Бинарный файл собран из папки data при помощи официального компилятора v2fly."
+            --notes "Бинарный файл собран из папки data при помощи официального компилятора v2fly (domain-list-community)."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
