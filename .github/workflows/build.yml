@@ -23,10 +23,17 @@ jobs:
 
       - name: Build geosite.dat via v2dat
         run: |
-          # Собираем geosite.dat напрямую из папки data
-          # v2dat сам подхватит все файлы в папке и сделает их тегами (категориями)
-          v2dat pack geosite -o ./ data
+          # Собираем geosite.dat. 
+          # Мы указываем флаг -f для принудительного задания имени выходного файла
+          v2dat pack geosite -o ./geosite.dat data
           
+          # Проверяем, создался ли файл, чтобы не упасть на следующем шаге
+          if [ ! -f "geosite.dat" ]; then
+            echo "❌ Ошибка: v2dat не создал geosite.dat!"
+            ls -la
+            exit 1
+          fi
+
       - name: Generate Checksum
         run: sha256sum geosite.dat > geosite.dat.sha256sum
 
@@ -37,6 +44,6 @@ jobs:
           gh api -X DELETE /repos/${{ github.repository }}/git/refs/tags/latest || true
           gh release create latest geosite.dat geosite.dat.sha256sum \
             --title "GeoSite Build: $(TZ='Europe/Moscow' date +'%Y-%m-%d %H:%M')" \
-            --notes "Собрано через v2dat 1:1 без изменения исходных правил. Категории: $(ls data | tr '\n' ' ')"
+            --notes "Собрано через v2dat 1:1. Категории: $(ls data | tr '\n' ' ')"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
