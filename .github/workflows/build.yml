@@ -1,7 +1,7 @@
-name: Build-GeoSite-Manual
+name: Build-GeoSite-Official-v2dat
 
 on:
-  workflow_dispatch: # Запуск только вручную
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,117 +12,31 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
-          cache: false
 
-      - name: Prepare Environment
+      - name: Install v2dat
+        run: go install github.com/urlesistiana/v2dat@latest
+
+      - name: Build geosite.dat via v2dat
         run: |
-          mkdir -p data
-          echo "RELEASE_DATE=$(TZ='Europe/Moscow' date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
-          echo "📊 Files to pack:"
-          ls data/
-
-      - name: Create Generator Script
-        run: |
-          cat <<EOF > builder.go
-          package main
-          import (
-          	"bufio"
-          	"encoding/binary"
-          	"fmt"
-          	"log"
-          	"os"
-          	"path/filepath"
-          	"strings"
-          )
-
-          func encodeField(num int, wireType int, data []byte) []byte {
-          	tag := uint32((num << 3) | wireType)
-          	var buf [binary.MaxVarintLen32]byte
-          	n := binary.PutUvarint(buf[:], uint64(tag))
-          	res := buf[:n]
-          	if wireType == 2 {
-          		var lBuf [binary.MaxVarintLen32]byte
-          		ln := binary.PutUvarint(lBuf[:], uint64(len(data)))
-          		res = append(res, lBuf[:ln]...)
-          	}
-          	return append(res, data...)
-          }
-
-          func main() {
-          	var allGeoSites []byte
-          	files, err := os.ReadDir("./data")
-          	if err != nil { log.Fatal(err) }
-
-          	for _, f := range files {
-          		if f.IsDir() || strings.HasPrefix(f.Name(), ".") { continue }
-          		
-          		// ПРИНУДИТЕЛЬНЫЙ ВЕРХНИЙ РЕГИСТР
-          		tagName := strings.ToUpper(f.Name())
-          		
-          		// Изменил текст лога на "UPPERCASE Pack:", чтобы убедиться в обновлении
-          		fmt.Printf("UPPERCASE Pack: %s\n", tagName)
-          		
-          		var domainsBytes []byte
-          		file, _ := os.Open(filepath.Join("./data", f.Name()))
-          		scanner := bufio.NewScanner(file)
-          		
-          		for scanner.Scan() {
-          			line := strings.TrimSpace(scanner.Text())
-          			if line == "" || strings.HasPrefix(line, "#") { continue }
-          			domainEntry := encodeField(2, 2, []byte(line))
-          			domainsBytes = append(domainsBytes, encodeField(2, 2, domainEntry)...)
-          		}
-          		file.Close()
-
-          		geoSiteData := encodeField(1, 2, []byte(tagName))
-          		geoSiteData = append(geoSiteData, domainsBytes...)
-          		allGeoSites = append(allGeoSites, encodeField(1, 2, geoSiteData)...)
-          	}
-
-          	os.WriteFile("geosite.dat", allGeoSites, 0644)
-          	fmt.Println("✅ Generation complete.")
-          }
-          EOF
-
-      - name: Run Generator
-        run: go run builder.go
-
+          # Собираем geosite.dat напрямую из папки data
+          # v2dat сам подхватит все файлы в папке и сделает их тегами (категориями)
+          v2dat pack geosite -o ./ data
+          
       - name: Generate Checksum
         run: sha256sum geosite.dat > geosite.dat.sha256sum
 
-      - name: Cleanup and Update Release
+      - name: Create Release
         run: |
-          # Полное удаление старого релиза и тега через API для чистоты ассетов и времени
+          echo "RELEASE_DATE=$(TZ='Europe/Moscow' date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
           gh release delete latest --yes || true
           gh api -X DELETE /repos/${{ github.repository }}/git/refs/tags/latest || true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create Fresh Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: "GeoSite Build: ${{ env.RELEASE_DATE }}"
-          body: |
-            ## 🚀 Manual GeoSite Build
-            **Build Date:** ${{ env.RELEASE_DATE }} (MSK)
-            
-            ### 📦 Included categories:
-            ```
-            $(ls data/)
-            ```
-          draft: false
-          prerelease: false
-          make_latest: true
-          files: |
-            geosite.dat
-            geosite.dat.sha256sum
+          gh release create latest geosite.dat geosite.dat.sha256sum \
+            --title "GeoSite Build: $(TZ='Europe/Moscow' date +'%Y-%m-%d %H:%M')" \
+            --notes "Собрано через v2dat 1:1 без изменения исходных правил. Категории: $(ls data | tr '\n' ' ')"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
