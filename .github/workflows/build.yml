@@ -1,4 +1,4 @@
-name: Build-GeoSite-Official-Final
+name: Build-GeoSite
 
 on:
   workflow_dispatch:
