@@ -1,0 +1,38 @@
+# Use `geosite:mailru-group` if you want to match the entire VK Group
+mvk.com
+vk.cc
+vk.com
+vk.design
+vk.link
+vkontakte.com
+keyword:vkuser
+keyword:sun9-
+keyword:sun10-
+keyword:sun163-
+
+# Ads and tracking
+adv.vk.com @ads
+analytics.vk.com @ads
+ms.vk.com @ads
+full:ads.vk.com @ads
+full:stats.vk-portal.net @ads
+full:target.vk.com @ads
+
+# CDNs
+cdn-vk.net
+userapi.com
+vk-cdn.me
+vk-cdn.net
+vk-portal.net
+vkcache.com
+vkcdnservice.com
+
+# VK Messenger
+vk.me
+vkmessenger.app
+vkmessenger.com
+
+# VK Pay
+vkpay.app
+vkpay.com
+vkpay.io
