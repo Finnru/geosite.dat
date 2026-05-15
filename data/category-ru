@@ -67,6 +67,7 @@ keyword:zcvh
 keyword:zona
 keyword:dashly
 keyword:carrot
+keyword:comss
 full:remontka.pro
 full:1lot.tv
 full:s.only4.tv
@@ -109,14 +110,6 @@ roistat.com
 srv-hub.org
 t1.cloud
 taxsee.com
-comss.club
-comss.info
-comss.me
-comss.net
-comss.news
-comss.one
-comss.online
-comss.org
 eligens.cl
 eligens.com.br
 eligens.io
@@ -132,3 +125,7 @@ cdn.plyr.io
 cdn.jsdelivr.net
 api.zenithjs.ws
 cutme.info
+#--------------- pinterest
+pin.it
+pinimg.com
+keyword:pinterest
