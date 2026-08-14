@@ -1,7 +1,7 @@
 name: Build-GeoSite
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Запуск только вручную
 
 permissions:
   contents: write
@@ -9,11 +9,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -21,17 +21,20 @@ jobs:
           go-version: '1.24'
           cache: true
 
+      - name: Prepare Release Environment
+        run: |
+          # Фиксируем дату сборки для релиза
+          echo "RELEASE_DATE=$(TZ='Europe/Moscow' date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
+
       - name: Build geosite.dat
         run: |
           # 1. Устанавливаем официальный компилятор
           go install github.com/v2fly/domain-list-community@latest
           
-          # 2. Собираем файл. 
-          # Компилятор ищет файлы в директории, указанной в --datapath
-          # По умолчанию он сохраняет результат в файл dlc.dat
+          # 2. Собираем файл из папки ./data
           $(go env GOPATH)/bin/domain-list-community --datapath=./data
           
-          # 3. Проверяем и переименовываем
+          # 3. Проверяем наличие файла dlc.dat и переименовываем
           if [ -f "dlc.dat" ]; then
             mv dlc.dat geosite.dat
             echo "✅ geosite.dat успешно собран"
@@ -44,13 +47,28 @@ jobs:
       - name: Generate Checksum
         run: sha256sum geosite.dat > geosite.dat.sha256sum
 
-      - name: Create Release
+      - name: Clean Old Release
         run: |
-          echo "RELEASE_DATE=$(TZ='Europe/Moscow' date +'%Y-%m-%d %H:%M')" >> $GITHUB_ENV
+          # Жесткое удаление старого релиза и тега через API
           gh release delete latest --yes || true
           gh api -X DELETE /repos/${{ github.repository }}/git/refs/tags/latest || true
-          gh release create latest geosite.dat geosite.dat.sha256sum \
-            --title "GeoSite Build: $(TZ='Europe/Moscow' date +'%Y-%m-%d %H:%M')" \
-            --notes "Бинарный файл собран из папки data при помощи официального компилятора v2fly (domain-list-community)."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "GeoSite Build: ${{ env.RELEASE_DATE }}"
+          body: |
+            Бинарный файл собран из папки data при помощи официального компилятора v2fly (domain-list-community).
+            
+            **Дата сборки:** ${{ env.RELEASE_DATE }}
+          draft: false
+          prerelease: false
+          make_latest: true
+          files: |
+            geosite.dat
+            geosite.dat.sha256sum
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
