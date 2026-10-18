@@ -1,4 +1,3 @@
-ru
 # VTB
 domain:vtb.ru
 domain:f6.security
@@ -10,6 +9,10 @@ domain:feonet.net
 domain:3ds.payment.ru
 acsr.3dsvtb.ru
 3ds-ds1.mirconnect.ru
+vneshtbank.ru
+facct.ru
+technoscore.ru
+appmetrica.yandex.net
 
 # TINKOFF BANK
 keyword:tinkoff
