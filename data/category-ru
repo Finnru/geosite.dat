@@ -15,7 +15,6 @@ include:mailru
 include:mindbox
 include:retail-ru
 keyword:kinopoisk
-keyword:kaspersky
 keyword:websocket.org
 keyword:1907
 keyword:3081
@@ -34,7 +33,6 @@ keyword:fotpro
 keyword:habr
 keyword:imagetmdb
 keyword:interkh
-keyword:kaspersky
 keyword:kinogram
 keyword:kinolot
 keyword:kinoserial
@@ -67,6 +65,8 @@ keyword:dashly
 keyword:carrot
 keyword:comss
 keyword:tildacdn
+adguard-dns.com
+adguard.org
 full:remontka.pro
 full:1lot.tv
 full:s.only4.tv
@@ -89,6 +89,8 @@ beeline.tv
 cdnvideohub.com
 trbcdn.net
 kinorium.com
+kaspersky.com
+kaspersky-labs.com
 restream-media.net
 mosmetro.tech
 avs.io
