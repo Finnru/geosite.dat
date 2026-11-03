@@ -5,7 +5,6 @@ domain:facct.ru
 domain:vtbgroup.com
 domain:vtb.com
 domain:sbpvtb.ru
-domain:feonet.net
 domain:3ds.payment.ru
 acsr.3dsvtb.ru
 3ds-ds1.mirconnect.ru
@@ -15,7 +14,15 @@ technoscore.ru
 appmetrica.yandex.net
 
 # TINKOFF BANK
-keyword:tinkoff
+domain:tbank.ru
+domain:t-static.ru
+domain:2w.ru
+domain:tbank-online.com
+domain:tinkoff.ru
+domain:tbank.global
+domain:cdn-tinkoff.ru
+domain:diginetica.net
+domain:voskhod.ru
 xn--90aifd0azb.xn--p1acf # тбизнес.рус
 4epenaxa.com
 atomyze.tech
