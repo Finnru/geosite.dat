@@ -1,11 +1,11 @@
 # VTB
-domain:vtb.ru
-domain:f6.security
-domain:facct.ru
-domain:vtbgroup.com
-domain:vtb.com
-domain:sbpvtb.ru
-domain:3ds.payment.ru
+vtb.ru
+f6.security
+facct.ru
+vtbgroup.com
+vtb.com
+sbpvtb.ru
+3ds.payment.ru
 acsr.3dsvtb.ru
 3ds-ds1.mirconnect.ru
 vneshtbank.ru
@@ -13,15 +13,15 @@ facct.ru
 technoscore.ru
 
 # TINKOFF BANK
-domain:tbank.ru
-domain:t-static.ru
-domain:2w.ru
-domain:tbank-online.com
-domain:tinkoff.ru
-domain:tbank.global
-domain:cdn-tinkoff.ru
-domain:diginetica.net
-domain:voskhod.ru
+tbank.ru
+t-static.ru
+2w.ru
+tbank-online.com
+tinkoff.ru
+tbank.global
+cdn-tinkoff.ru
+diginetica.net
+voskhod.ru
 xn--90aifd0azb.xn--p1acf # тбизнес.рус
 4epenaxa.com
 atomyze.tech
@@ -53,9 +53,9 @@ sberbank.com
 
 # Ads/tracking
 neon.click @ads
-domain:error-tracking.megamarket.tech @ads
-domain:sentry.sberauto.com @ads
-domain:tracing-http.megamarket.tech @ads
+error-tracking.megamarket.tech @ads
+sentry.sberauto.com @ads
+tracing-http.megamarket.tech @ads
 
 # Business ecosystem
 megamarket.tech
@@ -94,7 +94,7 @@ keyword:2gis
 
 # Alfa Bank
 alfabank.st
-domain:alfabank.oavdo.amc
+alfabank.oavdo.amc
 
 # GazpromBank
 gazprombank.com
