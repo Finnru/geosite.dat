@@ -1,7 +1,5 @@
 # ads-ru: российские рекламные и трекерные домены + домены, замеченные на zona/klipzona
-# Источник: runetfreedom/russia-v2ray-rules-dat, geosite-category-ads-all.srs (отфильтровано)
 
-# --- Seen on zona/klipzona (по логу пользователя, не российские, но реально блокируют рекламу) ---
 myangular.life
 alloviewroll.com
 
