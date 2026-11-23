@@ -23,6 +23,22 @@ yclients.com
 
 # Ads and tracking
 
+full:ads.dahlmessenger.com @ads
+full:ads.icq.com @ads
+full:adsapp.dahlmessenger.com @ads
+full:adsapp.stage.telega.info @ads
+full:adsapp.telega.info @ads
+full:alt-r.my.com @ads
+full:r0.mradx.net @ads
+full:sentry-ng.g.smailru.net @ads
+full:sentry.dev-my.com @ads
+full:sentry.dev-my.games @ads
+full:sentry.viqeo.tv @ads
+full:srch-telemeter10.g.smailru.net @ads
+full:stacks.vk-portal.net @ads
+full:stats.dahlmessenger.com @ads
+full:stats.dev.telega.info @ads
+full:stats.telega.info @ads
 ads.viqeo.tv @ads
 adsadvisor.io @ads
 metrics.viqeo.tv @ads
@@ -31,22 +47,6 @@ mytrk.link # block might break something, needs further investigation
 target.my.com @ads
 tracker-api.my.com @ads
 tracker.my.com @ads
-full:ads.dahlmessenger.com @ads
-full:ads.icq.com @ads
-full:adsapp.dahlmessenger.com @ads
-full:adsapp.telega.info @ads
-full:adsapp.stage.telega.info @ads
-full:alt-r.my.com @ads
-full:r0.mradx.net @ads
-full:sentry-ng.g.smailru.net @ads
-full:srch-telemeter10.g.smailru.net @ads
-full:sentry.dev-my.com @ads
-full:sentry.dev-my.games @ads
-full:sentry.viqeo.tv @ads
-full:stacks.vk-portal.net @ads
-full:stats.dahlmessenger.com @ads
-full:stats.dev.telega.info @ads
-full:stats.telega.info @ads
 
 # CDNs
 attachmy.com
@@ -79,8 +79,8 @@ esforce.com
 ruhub.tv
 
 ## ICQ (deprecated)
-ciciq.net
 keyword:icq
+ciciq.net
 mirabilis.com
 xn-----6kc7adj0c9esa.com        # ай-си-кью.com
 xn----7sbaba0dc6cdn7cxcj.com    # аська-скачать.com

@@ -1,30 +1,23 @@
 # VTB
-vtb.ru
-f6.security
-facct.ru
-vtbgroup.com
-vtb.com
-sbpvtb.ru
+3ds-ds1.mirconnect.ru
 3ds.payment.ru
 acsr.3dsvtb.ru
-3ds-ds1.mirconnect.ru
-vneshtbank.ru
+f6.security
+facct.ru
+sbpvtb.ru
 technoscore.ru
+vneshtbank.ru
+vtb.com
+vtb.ru
+vtbgroup.com
 
 # TINKOFF BANK
-tbank.ru
-t-static.ru
 2w.ru
-tbank-online.com
-tinkoff.ru
-tbank.global
-cdn-tinkoff.ru
-diginetica.net
-voskhod.ru
-xn--90aifd0azb.xn--p1acf # тбизнес.рус
 4epenaxa.com
 atomyze.tech
+cdn-tinkoff.ru
 codeseason.by
+diginetica.net
 etna.ai
 jump.taxi
 koshelek.app
@@ -33,12 +26,19 @@ safeliner.tech
 sage-observability.tech
 t-bank.by
 t-finance.group
+t-static.ru
 t-tech.dev
 t-tech.team
 t.finance
+tbank-online.com
+tbank.global
+tbank.ru
 tdev.by
+tinkoff.ru
 unidraw.io
+voskhod.ru
 xn--90aifd0az.shop
+xn--90aifd0azb.xn--p1acf # тбизнес.рус
 xn--b1aechhj6bof8g5a.site
 xn--d1abkf4ap.fun
 xn--h1ao.site
@@ -51,8 +51,8 @@ sber-bank.by
 sberbank.com
 
 # Ads/tracking
-neon.click @ads
 error-tracking.megamarket.tech @ads
+neon.click @ads
 sentry.sberauto.com @ads
 tracing-http.megamarket.tech @ads
 
@@ -71,8 +71,8 @@ eaptechka.online
 giga.chat
 
 ## Jivo/Jivochat/Jivosite (chat for website)
-jivo.chat
 keyword:jivochat
+jivo.chat
 jivosite.com
 
 ## SBERBANK
@@ -87,13 +87,13 @@ accesspoint.uz
 getsynapse.io
 
 # Zvuk (music streaming)
+keyword:2gis
 zvuk-b2b.com
 zvuk.com
-keyword:2gis
 
 # Alfa Bank
-alfabank.st
 alfabank.oavdo.amc
+alfabank.st
 
 # GazpromBank
 gazprombank.com
